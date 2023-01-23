@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nokia SR Linux JSON RPC Web Demo</title>
+<script src="https://code.jquery.com/jquery-3.6.3.min.js" crossorigin="anonymous"></script>
+
+<script type="text/javascript">
+
+function log(m) {
+  const output = $( "#output" );
+  output.append('<br>' + (typeof m.replace === "function" ? m.replace('\n','<br>') : m));
+}
+
+// Note: Requires CORS to be disabled using startup argument --disable-web-security on Chrome
+async function jsonrpc(method,datastore,commands,id) {
+  const ip = $('#srl_ip').val();
+  const user = $('#srl_user').val(); // user:password
+  log( "jsonrpc: " + method + " commands=" + JSON.stringify(commands) );
+
+  const params = { 'commands': commands || [], }
+  if (datastore) {
+    params["datastore"] = datastore
+  }
+
+  const response = await fetch('http://'+ip+'/jsonrpc', {
+    method: 'POST',
+    headers: {
+      "Authorization": "Basic " + btoa( user ),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: method || 'get',
+      params: params,
+      id: id || 0
+    })
+  })
+  const { result, error } = await response.json()
+  log( JSON.stringify(error || result) )
+  return { result, error }
+}
+
+function jsonrpc_cli(commands) {
+  return jsonrpc('cli',null,commands)
+}
+
+async function getHostname() {
+  const x = await jsonrpc('get','state',[{ 'path': '/system/name/host-name' }])
+  log( x['result'] )
+}
+
+async function generateCheckpoint(id) {
+  const x = await jsonrpc('set','tools',[{ 'action': 'update', 'path': '/system/configuration/generate-checkpoint'}],id)
+  log( JSON.stringify(x) )
+}
+
+function generateCheckpoint_gui() {
+  generateCheckpoint( $('#checkpoint_id').val() )
+}
+
+async function restoreCheckpoint(id) {
+  cmds = [
+   "enter candidate private",
+   "load checkpoint id " + (id||"0") + " auto-commit",
+  ]
+  return jsonrpc_cli(cmds)
+}
+
+function restoreCheckpoint_gui() {
+  restoreCheckpoint( $('#checkpoint_id').val() )
+}
+
+async function commitCLI(cli,diff) {
+  cmds = ["enter candidate private"].concat(cli)
+  if (diff) { cmds = cmds.concat(["diff"]) }
+  cmds = cmds.concat(["commit now"])
+  const { result, error } = await jsonrpc_cli(cmds)
+  if (diff && !error) {
+    log( "diff:<br>" + result[ 1+cli.length ].text )
+  }
+  return result
+}
+
+function bgpCreateGroup(name,peer_as,diff) {
+  cli = [
+    "/network-instance default protocols bgp group \""+name+"\"",
+    "peer-as " + peer_as.toString()
+  ]
+  commitCLI(cli,diff)
+}
+
+function createBGPPeer_gui() {
+  bgpCreateGroup( $('#bgp_group_name').val(), $('#bgp_peer_as').val(),$('#bgp_diff').is(":checked") );
+}
+
+function bgpDeleteGroup(name,diff) {
+  cli = [
+    "/network-instance default protocols bgp delete group \""+name+"\"",
+  ]
+  commitCLI(cli,diff)
+}
+
+function deleteBGPPeer_gui() {
+  bgpDeleteGroup( $('#bgp_group_name').val(), $('#bgp_diff').is(":checked") );
+}
+
+$( document ).ready(function() {
+  $('#get_hostname_button').click( getHostname );
+  $('#gen_checkpoint_button').click( generateCheckpoint_gui );
+  $('#res_checkpoint_button').click( restoreCheckpoint_gui );
+  $('#create_bgp_button').click( createBGPPeer_gui );
+  $('#delete_bgp_button').click( deleteBGPPeer_gui );
+});
+
+</script>
+
+<style>
+html, body {
+  margin: 0px;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+header, footer {
+  color: white;
+  background-color: black;
+  align-items: center;
+  text-align: center;
+}
+
+header, #controls {
+  display: flex;
+  justify-content: space-between;
+}
+
+footer {
+  height: 10vh;
+}
+
+content {
+  display: flex;
+  height: 85vh;
+}
+
+#title {
+  color: rgb(0,101,237);
+  font: bold 30px 'Arial', sans-serif;
+  margin: 5px;
+}
+
+#logo {
+  height: 60px;
+  margin-right: 10px;
+}
+
+.centered {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  /* bring your own prefixes */
+  transform: translate(-50%, -50%);
+
+  z-index: 2147483647;
+}
+
+.tabs {
+  position: relative;
+  /* min-height: 200px; This part sucks */
+  clear: both;
+  margin: 60px 0;
+}
+.tab {
+  float: left;
+}
+.tab label {
+  background: #eee;
+  padding: 10px;
+  border: 1px solid #ccc;
+  margin-left: -1px;
+  position: relative;
+  left: 1px;
+
+  font-size: 12px;
+  font-weight: bold;
+}
+.tab [type=radio] {
+  display: none;
+}
+.content {
+  position: absolute;
+  top: 100px;
+  left: 0;
+  background: white;
+  /*right: 0;
+  bottom: 0;*/
+  display: none;
+  min-width: 200px;
+  padding-top: 20px;
+  padding-left: 20px;
+  border: 1px solid #ccc;
+  margin-left: 10px;
+  overflow: hidden;
+}
+.content > * {
+  opacity: 0;
+
+  -webkit-transform: translate3d(0, 0, 0);
+
+  -webkit-transform: translateX(-100%);
+  -moz-transform:    translateX(-100%);
+  -ms-transform:     translateX(-100%);
+  -o-transform:      translateX(-100%);
+
+  -webkit-transition: all 0.6s ease;
+  -moz-transition:    all 0.6s ease;
+  -ms-transition:     all 0.6s ease;
+  -o-transition:      all 0.6s ease;
+}
+[type=radio]:checked ~ label {
+  background: white;
+  border-bottom: 1px solid white;
+  z-index: 2;
+}
+[type=radio]:checked ~ label ~ .content {
+  z-index: 1;
+  display: block;
+}
+[type=radio]:checked ~ label ~ .content > * {
+  opacity: 1;
+
+  -webkit-transform: translateX(0);
+  -moz-transform:    translateX(0);
+  -ms-transform:     translateX(0);
+  -o-transform:      translateX(0);
+}
+
+.content label{
+ display: block;
+ font: 13px Arial, Helvetica, sans-serif;
+ color: #888;
+ margin-bottom: 15px;
+}
+</style>
+
+<style type="text/css">
+.form-style-7{
+    display: block;
+    max-width:400px;
+    margin-right: 10px;
+    margin-bottom: 0px;
+    background:#fff;
+    border-radius:2px;
+    padding:20px;
+    font-family: Georgia, "Times New Roman", Times, serif;
+}
+.form-style-7 h1{
+    display: block;
+    text-align: center;
+    padding: 0;
+    margin: 0px 0px 20px 0px;
+    color: #5C5C5C;
+    font-size:x-large;
+}
+.form-style-7 ul{
+    list-style:none;
+    padding:0;
+    margin:0;
+}
+.form-style-7 li{
+    display: block;
+    padding: 9px;
+    border:1px solid #DDDDDD;
+    margin-bottom: 20px;
+    border-radius: 3px;
+}
+.form-style-7 li:last-child{
+    border:none;
+    margin-bottom: 0px;
+    text-align: center;
+}
+.form-style-7 li > label{
+    display: block;
+    float: left;
+    margin-top: -19px;
+    background: #FFFFFF;
+    height: 14px;
+    padding: 2px 5px 2px 5px;
+    color: black;
+    font-size: 14px;
+    overflow: hidden;
+    font-family: Arial, Helvetica, sans-serif;
+}
+.form-style-7 input[type="text"],
+.form-style-7 input[type="date"],
+.form-style-7 input[type="datetime"],
+.form-style-7 input[type="email"],
+.form-style-7 input[type="number"],
+.form-style-7 input[type="search"],
+.form-style-7 input[type="time"],
+.form-style-7 input[type="url"],
+.form-style-7 input[type="password"],
+.form-style-7 textarea,
+.form-style-7 select
+{
+    box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    width: 100%;
+    display: block;
+    outline: none;
+    border: none;
+    height: 25px;
+    line-height: 25px;
+    font-size: 16px;
+    padding: 0;
+    font-family: Georgia, "Times New Roman", Times, serif;
+}
+.form-style-7 input[type="text"]:focus,
+.form-style-7 input[type="date"]:focus,
+.form-style-7 input[type="datetime"]:focus,
+.form-style-7 input[type="email"]:focus,
+.form-style-7 input[type="number"]:focus,
+.form-style-7 input[type="search"]:focus,
+.form-style-7 input[type="time"]:focus,
+.form-style-7 input[type="url"]:focus,
+.form-style-7 input[type="password"]:focus,
+.form-style-7 textarea:focus,
+.form-style-7 select:focus
+{
+}
+.form-style-7 li > span{
+    background: #F3F3F3;
+    display: block;
+    padding: 3px;
+    margin: 0 -9px -9px -9px;
+    text-align: center;
+    color: #C0C0C0;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+}
+.form-style-7 textarea{
+    resize:none;
+}
+.form-style-7 input[type="submit"],
+.form-style-7 input[type="button"]{
+    background: black;
+    border: none;
+    padding: 10px 20px 10px 20px;
+    border-bottom: 3px solid #5994FF;
+    border-radius: 3px;
+    color: #D2E2FF;
+}
+.form-style-7 input[type="submit"]:hover,
+.form-style-7 input[type="button"]:hover{
+    background: #6B9FFF;
+    color:#fff;
+}
+
+#use_cases {
+  width: 60%;
+}
+
+#output {
+  width: 80%;
+  color: rgb(132,184,255);
+  background-color: black;
+  font-family: Lucida Console;
+  font-size: 80%;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  line-height: 1em;
+  padding-left: 20px;
+  overflow-y: auto;
+}
+</style>
+</head>
+
+<body>
+<header>
+<div id="controls">
+<div id="nx9k" class="logged_in">
+<label for="srl_ip">SRL IP </label><input type="text" id="srl_ip" size="12" value="192.168.121.101">
+<label for="srl_user">SRL login </label><input type="text" id="srl_user" size="20" value="admin:NokiaSrl1!">
+</div>
+</div>
+<div id="title">SR Linux JSON RPC (demo)</div>
+<img id="logo" src="./metamorphosis.png">
+</header>
+<content>
+<div id="use_cases" class="logged_in">
+<div class="tab">
+<input type="radio" id="tab-0" name="tab-group-1" checked="">
+<label for="tab-0">GET hostname</label>
+<div class="content" id="get_hostname">
+Basic use case: Retrieve system hostname from path '/system/name/host-name'
+<form class="form-style-7 logged_in" id="get_hostname">
+<ul>
+<li>
+<input id="get_hostname_button" type="button" value="GET hostname">
+</li>
+</ul>
+</form>
+</div>
+</div>
+<div class="tab">
+<input type="radio" id="tab-0b" name="tab-group-1" checked="">
+<label for="tab-0b">SET/RESTORE checkpoint</label>
+<div class="content" id="set_checkpoint">
+Basic use case: Set/restore configuration checkpoint
+<form class="form-style-7 logged_in" id="set_checkpoint">
+<ul>
+<li id="li_chkpoint_id">
+<label for="checkpoint_id">Checkpoint ID</label>
+<input type="number" id="checkpoint_id" min="0" max="10" value="0">
+<span>Enter Checkpoint ID (0..10)</span>
+</li>
+<li>
+<input id="gen_checkpoint_button" type="button" value="SET checkpoint">
+<input id="res_checkpoint_button" type="button" value="Restore checkpoint">
+</li>
+</ul>
+</form>
+</div>
+</div>
+<div class="tab">
+<input type="radio" id="tab-1" name="tab-group-1">
+<label for="tab-1">BGP Groups</label>
+<div class="content" id="BGP_Group">
+Create a new BGP peer group
+<form class="form-style-7 logged_in" id="create_bgp">
+<ul>
+<li id="li_bgp_group">
+<label for="bgp_group_name">BGP group name</label>
+<input type="text" id="bgp_group_name" value="New group">
+<span>Enter a name for this BGP peer group</span>
+</li>
+<li id="li_bgp_peer_as">
+<label for="bgp_peer_as">Peer AS</label>
+<input type="number" id="bgp_peer_as" min="1" max="65535" value="65123">
+<span>Enter BGP peering AS (2-byte)</span>
+</li>
+<li id="li_bgp_diff">
+<label for="bgp_diff">Perform 'diff' before commit?</label>
+<input type="checkbox" id="bgp_diff" checked>
+<span>Optional 'diff'</span>
+</li>
+<li>
+<input id="create_bgp_button" type="button" value="Add BGP peer group">
+<input id="delete_bgp_button" type="button" value="Remove BGP group (by name)">
+</li>
+</ul>
+</form>
+</div>
+</div>
+</div>
+<div id="output">JSON RPC output</div>
+</content>
+<footer><div>Copyright © 2023 Nokia, all rights reserved.</div>
+</footer>
+</body></html>
