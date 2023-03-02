@@ -39,7 +39,7 @@ cmds = [
 
  # Sample: Create a VLAN on both ports in a MH lag on 2 leaves
  "/interface lag3 vlan-tagging true",
- "/interface lag3 subinterface 0 vlan encap single-tagged vlan-id 10",
+ "/interface lag3 subinterface 1 vlan encap single-tagged vlan-id 20",
 
  "commit now"
 ]
@@ -50,9 +50,15 @@ for node in NODES:
   success = success and not "error" in _jsonrpcRunCli(node,cmds)
 
 for node in NODES:
-  _action = "clear" if success else "revert"
   cmds2 = [
-    f"enter candidate exclusive name {RANDOM_ID}",
-    f"/tools system configuration checkpoint {RANDOM_ID} {_action}"
+    f"enter candidate exclusive name {RANDOM_ID}"
+  ]
+  if not success:
+    cmds2 += [
+      f"/tools system configuration checkpoint {RANDOM_ID} revert"
+    ]
+  ]
+  cmds2 += [
+    f"/tools system configuration checkpoint {RANDOM_ID} clear"
   ]
   _jsonrpcRunCli(node,cmds2)
