@@ -56,6 +56,8 @@ for node in NODES:
     f"enter candidate exclusive name {RANDOM_ID}",
     f"/tools system configuration checkpoint {RANDOM_ID} {_action}"
   ]
+  if not success:
+    cmds2 += [ f"/tools system configuration checkpoint {RANDOM_ID} clear" ]
   _jsonrpcRunCli(node,cmds2) # May return an error if checkpoint does not exist
 
 print( f"RESULT: {'SUCCESS' if success else 'FAILED'}" )
