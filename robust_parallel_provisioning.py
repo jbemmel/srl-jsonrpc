@@ -48,18 +48,14 @@ success = True
 NODES = ["clab-evpn-lab-leaf2","clab-evpn-lab-leaf3"]
 for node in NODES:
   success = success and not "error" in _jsonrpcRunCli(node,cmds)
+  if not success: break
 
 for node in NODES:
+  _action = "clear" if success else "revert"
   cmds2 = [
-    f"enter candidate exclusive name {RANDOM_ID}"
+    f"enter candidate exclusive name {RANDOM_ID}",
+    f"/tools system configuration checkpoint {RANDOM_ID} {_action}"
   ]
-  if not success:
-    cmds2 += [
-      f"/tools system configuration checkpoint {RANDOM_ID} revert"
-    ]
-  cmds2 += [
-    f"/tools system configuration checkpoint {RANDOM_ID} clear"
-  ]
-  _jsonrpcRunCli(node,cmds2)
+  _jsonrpcRunCli(node,cmds2) # May return an error if checkpoint does not exist
 
 print( f"RESULT: {'SUCCESS' if success else 'FAILED'}" )
