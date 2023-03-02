@@ -18,7 +18,7 @@ def _jsonrpcPost(node, json_data, timeout=None):
     resp = requests.post(geturl, headers=headers, json=json_data, timeout=timeout, verify=False)
     resp.raise_for_status()
     print( json.dumps(resp.json()) )
-    return resp.json() if resp.text else ""
+    return resp.json()
 
 def _jsonrpcRunCli(node,cmds):
     data = {
@@ -41,7 +41,7 @@ cmds = [
  "/interface lag3 vlan-tagging true",
  "/interface lag3 subinterface 1 vlan encap single-tagged vlan-id 20",
 
- "commit now"
+ "commit stay" # Tried 'commit validate' but it allows invalid vlan config
 ]
 
 success = True
@@ -57,8 +57,9 @@ for node in NODES:
     cmds2 += [
       f"/tools system configuration checkpoint {RANDOM_ID} revert"
     ]
-  ]
   cmds2 += [
     f"/tools system configuration checkpoint {RANDOM_ID} clear"
   ]
   _jsonrpcRunCli(node,cmds2)
+
+print( f"RESULT: {'SUCCESS' if success else 'FAILED'}" )
