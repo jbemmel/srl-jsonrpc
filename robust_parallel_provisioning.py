@@ -61,12 +61,12 @@ NODES = ["clab-evpn-lab-leaf2","clab-evpn-lab-leaf3"]
 
 def configure_nodes():
 
-  IN_PROGRESS = "There is a commit already in progress for this candidate" # When using same candidate name in parallel
+  # IN_PROGRESS = "There is a commit already in progress for this candidate" # When using same candidate name in parallel
   # IN_PROGRESS = "commit confirmed in progress" # When using different candidate names
 
   for node in NODES:
     while "error" in (result := _jsonrpcRunCli(node,cmds)):
-      if IN_PROGRESS in result["error"]["message"]:
+      if "in progress" in result["error"]["message"]:
         # Backoff
         print( "Backing off 5 seconds..." )
         time.sleep(5.0)
