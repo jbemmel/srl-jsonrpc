@@ -4,7 +4,7 @@
 # creating checkpoints and exclusive configuration sessions to get consistent
 # rollback
 
-import requests,json
+import requests,json,string,random,time,sys
 
 USERNAME = "admin"
 PASSWORD = "NokiaSrl1!"
@@ -29,9 +29,13 @@ def _jsonrpcRunCli(node,cmds):
             "commands": cmds
         }
     }
+    print( f"Sending commands: {cmds}" )
     return _jsonrpcPost(node,data)
 
-RANDOM_ID = "xyz"
+RANDOM_ID = "C" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+print( f"Selected random ID: {RANDOM_ID}" )
+
+VLAN = sys.argv[1] if len(sys.argv) > 1 else "10"
 
 cmds = [
  f"enter candidate exclusive name {RANDOM_ID}",
@@ -39,7 +43,7 @@ cmds = [
 
  # Sample: Create a VLAN on both ports in a MH lag on 2 leaves
  "/interface lag3 vlan-tagging true",
- "/interface lag3 subinterface 1 vlan encap single-tagged vlan-id 20",
+ f"/interface lag3 subinterface 0 vlan encap single-tagged vlan-id {VLAN}",
 
  "commit stay" # Tried 'commit validate' but it allows invalid vlan config
 ]
@@ -49,6 +53,8 @@ NODES = ["clab-evpn-lab-leaf2","clab-evpn-lab-leaf3"]
 for node in NODES:
   success = success and not "error" in _jsonrpcRunCli(node,cmds)
   if not success: break
+
+time.sleep(20.0) # Wait 20 seconds for parallel testing purposes
 
 for node in NODES:
   _action = "clear" if success else "revert"
